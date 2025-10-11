@@ -22,7 +22,7 @@ All code has been validated and shows **no linter errors**:
 Activate your virtual environment and test imports:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 python3 -c "from backend.models import BanditState; print('✓ BanditState model OK')"
 python3 -c "from backend.ml.bandit_selector import BanditSelector; print('✓ BanditSelector OK')"
 python3 -c "import numpy; print('✓ NumPy OK')"
@@ -44,7 +44,7 @@ Expected output:
 **Run migration:**
 ```bash
 cd /Users/tea/Documents/Passion-Projects/movie_recommender
-source venv/bin/activate
+source .venv/bin/activate
 python3 backend/migrate_add_bandit_states.py
 ```
 
@@ -188,7 +188,7 @@ finally:
 **Start server:**
 ```bash
 cd /Users/tea/Documents/Passion-Projects/movie_recommender
-source venv/bin/activate
+source .venv/bin/activate
 uvicorn backend.main:app --reload
 ```
 
@@ -340,7 +340,7 @@ curl -X GET "http://localhost:8000/analytics/performance?days=1" \
 **Run monitoring check:**
 ```bash
 cd /Users/tea/Documents/Passion-Projects/movie_recommender
-source venv/bin/activate
+source .venv/bin/activate
 python3 backend/ml/monitoring_alerts.py
 ```
 
@@ -542,7 +542,7 @@ After 2-4 weeks of learning:
 
 ### Issue: Import errors during testing
 **Cause:** Virtual environment not activated  
-**Fix:** `source venv/bin/activate`
+**Fix:** `source .venv/bin/activate`
 
 ### Issue: Database connection errors
 **Cause:** DATABASE_URL not set  

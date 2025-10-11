@@ -9,7 +9,7 @@ cd /Users/tea/Documents/Passion-Projects/movie_recommender
 
 # Option A: Virtual Environment (recommended)
 python3 -m venv venv
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 
 # Option B: User installation

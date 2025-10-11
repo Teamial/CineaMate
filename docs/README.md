@@ -7,7 +7,7 @@ A Python pipeline for fetching movie data from The Movie Database (TMDB) API and
 1. **Create and activate virtual environment:**
    ```bash
    python3 -m venv venv
-   source venv/bin/activate
+   source .venv/bin/activate
    ```
 
 2. **Install dependencies:**
@@ -48,7 +48,7 @@ pipeline.load(df, "sqlite:///movies.db")
 Run the test script to verify everything works:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 python test_pipeline.py
 ```
 

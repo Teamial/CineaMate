@@ -20,7 +20,7 @@ cd /Users/tea/Documents/Passion-Projects/movie_recommender
 python3 -m venv venv
 
 # Activate it
-source venv/bin/activate
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -432,7 +432,7 @@ python3 -c "import torch; print(f'GPU: {torch.cuda.is_available()}')"
 **Solution**: Use virtual environment:
 ```bash
 python3 -m venv venv
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

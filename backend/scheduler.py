@@ -15,11 +15,16 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from movie_pipeline import MovieETLPipeline
+# Import pipeline from tools directory
+try:
+    from tools.movie_pipeline import MovieETLPipeline
+except ImportError:
+    # Fallback if tools import fails
+    MovieETLPipeline = None
 
 # Optional historical importer; only schedule related jobs if import succeeds
 try:
-    from historical_movie_import import HistoricalMovieImporter
+    from tools.historical_movie_import import HistoricalMovieImporter
     HAS_HISTORICAL_IMPORTER = True
 except Exception:
     HistoricalMovieImporter = None  # type: ignore
