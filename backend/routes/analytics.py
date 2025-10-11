@@ -83,10 +83,33 @@ async def track_recommendation_click(
 ):
     """
     Track when a user clicks on a recommended movie
+    Also updates bandit with success signal
     """
     def track_click():
+        from ..models import RecommendationEvent
+        from ..ml.bandit_selector import BanditSelector
+        
         recommender = MovieRecommender(db)
         recommender.track_recommendation_click(data.user_id, data.movie_id)
+        
+        # Update bandit - clicks are successes
+        try:
+            # Get the recommendation event to find algorithm and context
+            event = db.query(RecommendationEvent).filter(
+                RecommendationEvent.user_id == data.user_id,
+                RecommendationEvent.movie_id == data.movie_id
+            ).order_by(RecommendationEvent.created_at.desc()).first()
+            
+            if event and event.algorithm and event.context:
+                # Extract the base algorithm name (remove "bandit_" prefix if present)
+                algorithm = event.algorithm.replace('bandit_', '') if event.algorithm.startswith('bandit_') else event.algorithm
+                
+                # Update bandit state
+                bandit = BanditSelector(db)
+                bandit.update_bandit(event.context, algorithm, 'success')
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to update bandit for click: {e}")
     
     # Run in background to not slow down response
     background_tasks.add_task(track_click)
@@ -102,10 +125,41 @@ async def track_recommendation_rating(
 ):
     """
     Track when a user rates a recommended movie
+    Also updates bandit based on rating value
     """
     def track_rating():
+        from ..models import RecommendationEvent
+        from ..ml.bandit_selector import BanditSelector
+        
         recommender = MovieRecommender(db)
         recommender.track_recommendation_rating(data.user_id, data.movie_id, data.rating)
+        
+        # Update bandit based on rating
+        try:
+            # Get the recommendation event
+            event = db.query(RecommendationEvent).filter(
+                RecommendationEvent.user_id == data.user_id,
+                RecommendationEvent.movie_id == data.movie_id
+            ).order_by(RecommendationEvent.created_at.desc()).first()
+            
+            if event and event.algorithm and event.context:
+                # Extract base algorithm name
+                algorithm = event.algorithm.replace('bandit_', '') if event.algorithm.startswith('bandit_') else event.algorithm
+                
+                # Determine outcome based on rating
+                if data.rating >= 4.0:
+                    outcome = 'success'
+                elif data.rating <= 2.0:
+                    outcome = 'failure'
+                else:
+                    outcome = 'neutral'
+                
+                # Update bandit state
+                bandit = BanditSelector(db)
+                bandit.update_bandit(event.context, algorithm, outcome)
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to update bandit for rating: {e}")
     
     # Run in background
     background_tasks.add_task(track_rating)
@@ -157,10 +211,29 @@ async def track_thumbs_up(
 ):
     """
     Track when a user gives thumbs up to a recommended movie
+    Also updates bandit with success signal
     """
     def track():
+        from ..models import RecommendationEvent
+        from ..ml.bandit_selector import BanditSelector
+        
         recommender = MovieRecommender(db)
         recommender.track_recommendation_thumbs_up(data.user_id, data.movie_id)
+        
+        # Update bandit - thumbs up is success
+        try:
+            event = db.query(RecommendationEvent).filter(
+                RecommendationEvent.user_id == data.user_id,
+                RecommendationEvent.movie_id == data.movie_id
+            ).order_by(RecommendationEvent.created_at.desc()).first()
+            
+            if event and event.algorithm and event.context:
+                algorithm = event.algorithm.replace('bandit_', '') if event.algorithm.startswith('bandit_') else event.algorithm
+                bandit = BanditSelector(db)
+                bandit.update_bandit(event.context, algorithm, 'success')
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to update bandit for thumbs up: {e}")
     
     background_tasks.add_task(track)
     return {"status": "tracked", "action": "thumbs_up"}
@@ -174,10 +247,29 @@ async def track_thumbs_down(
 ):
     """
     Track when a user gives thumbs down to a recommended movie
+    Also updates bandit with failure signal
     """
     def track():
+        from ..models import RecommendationEvent
+        from ..ml.bandit_selector import BanditSelector
+        
         recommender = MovieRecommender(db)
         recommender.track_recommendation_thumbs_down(data.user_id, data.movie_id)
+        
+        # Update bandit - thumbs down is failure
+        try:
+            event = db.query(RecommendationEvent).filter(
+                RecommendationEvent.user_id == data.user_id,
+                RecommendationEvent.movie_id == data.movie_id
+            ).order_by(RecommendationEvent.created_at.desc()).first()
+            
+            if event and event.algorithm and event.context:
+                algorithm = event.algorithm.replace('bandit_', '') if event.algorithm.startswith('bandit_') else event.algorithm
+                bandit = BanditSelector(db)
+                bandit.update_bandit(event.context, algorithm, 'failure')
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to update bandit for thumbs down: {e}")
     
     background_tasks.add_task(track)
     return {"status": "tracked", "action": "thumbs_down"}
@@ -556,4 +648,63 @@ def get_thumbs_movies(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching thumbs movies: {str(e)}")
+
+
+@router.get("/bandit/stats")
+def get_bandit_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get Thompson Sampling bandit statistics
+    
+    Shows performance of each algorithm in different contexts
+    """
+    from ..ml.bandit_selector import BanditSelector
+    from ..models import BanditState
+    
+    try:
+        bandit = BanditSelector(db)
+        
+        # Get all bandit states
+        all_stats = bandit.get_bandit_stats()
+        
+        # Get summary statistics
+        states = db.query(BanditState).all()
+        
+        total_pulls = sum(s.total_pulls for s in states)
+        total_successes = sum(s.total_successes for s in states)
+        total_failures = sum(s.total_failures for s in states)
+        
+        # Calculate per-algorithm stats
+        algorithm_summary = {}
+        for algo in bandit.algorithms:
+            algo_states = [s for s in states if s.algorithm == algo]
+            if algo_states:
+                algo_pulls = sum(s.total_pulls for s in algo_states)
+                algo_successes = sum(s.total_successes for s in algo_states)
+                algo_failures = sum(s.total_failures for s in algo_states)
+                
+                algorithm_summary[algo] = {
+                    'total_pulls': algo_pulls,
+                    'total_successes': algo_successes,
+                    'total_failures': algo_failures,
+                    'success_rate': (algo_successes / (algo_successes + algo_failures)) if (algo_successes + algo_failures) > 0 else 0,
+                    'selection_rate': (algo_pulls / total_pulls) if total_pulls > 0 else 0
+                }
+        
+        return {
+            'summary': {
+                'total_contexts': len(set(s.context_key for s in states)),
+                'total_pulls': total_pulls,
+                'total_successes': total_successes,
+                'total_failures': total_failures,
+                'overall_success_rate': (total_successes / (total_successes + total_failures)) if (total_successes + total_failures) > 0 else 0
+            },
+            'algorithm_summary': algorithm_summary,
+            'detailed_stats': all_stats
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching bandit stats: {str(e)}")
 

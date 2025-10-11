@@ -100,6 +100,17 @@ class PipelineScheduler:
         )
         logger.info("✓ Scheduled: Embedding refresh daily at 4:00 AM")
         
+        # Monitoring: Every day at 9 AM (check system health)
+        self.scheduler.add_job(
+            func=self._run_monitoring,
+            trigger=CronTrigger(hour=9, minute=0),
+            id='daily_monitoring',
+            name='Daily System Monitoring',
+            replace_existing=True,
+            max_instances=1
+        )
+        logger.info("✓ Scheduled: System monitoring daily at 9:00 AM")
+        
         # Historical jobs (optional)
         if HAS_HISTORICAL_IMPORTER and self.historical_importer is not None:
             self.scheduler.add_job(
@@ -198,6 +209,50 @@ class PipelineScheduler:
                 
         except Exception as e:
             logger.error(f"❌ Embedding refresh failed: {e}", exc_info=True)
+    
+    def _run_monitoring(self):
+        """Run system health monitoring and alerting"""
+        logger.info("🔍 Starting system monitoring...")
+        try:
+            from ml.monitoring_alerts import MonitoringSystem
+            import json
+            
+            monitor = MonitoringSystem()
+            try:
+                # Run all health checks
+                results = monitor.check_all_metrics(days=7)
+                
+                # Log summary
+                logger.info(f"Monitoring Status: {results['overall_status'].upper()}")
+                
+                # Log alerts
+                if results['alerts']:
+                    logger.warning(f"⚠️  {len(results['alerts'])} alerts detected:")
+                    for alert in results['alerts']:
+                        severity_emoji = "🔴" if alert['severity'] == 'critical' else "🟡"
+                        logger.warning(f"{severity_emoji} {alert['message']}")
+                else:
+                    logger.info("✅ No alerts - system is healthy!")
+                
+                # Save detailed report
+                report_path = os.path.join(PROJECT_ROOT, 'monitoring_report.json')
+                with open(report_path, 'w') as f:
+                    json.dump(results, f, indent=2, default=str)
+                logger.info(f"📊 Detailed report saved to: {report_path}")
+                
+                # If critical alerts, could send notifications here
+                critical_alerts = [a for a in results['alerts'] if a['severity'] == 'critical']
+                if critical_alerts:
+                    logger.error(f"🚨 {len(critical_alerts)} CRITICAL alerts detected!")
+                    # TODO: Send email/Slack notification
+                
+                logger.info("✅ Monitoring completed successfully")
+                
+            finally:
+                monitor.close()
+                
+        except Exception as e:
+            logger.error(f"❌ Monitoring failed: {e}", exc_info=True)
     
     def _historical_recent_update(self):
         """Import recent movies from the last 30 days"""

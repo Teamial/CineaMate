@@ -206,3 +206,28 @@ class PasswordResetToken(Base):
     
     def __repr__(self):
         return f"<PasswordResetToken(user_id={self.user_id}, expires_at={self.expires_at})>"
+
+class BanditState(Base):
+    """Track bandit algorithm state for Thompson Sampling"""
+    __tablename__ = "bandit_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    context_key = Column(String(200), nullable=False, index=True)  # Hash of context features
+    algorithm = Column(String(50), nullable=False, index=True)  # svd, embeddings, graph, etc.
+    
+    # Thompson Sampling parameters
+    alpha = Column(Float, default=1.0, nullable=False)  # Successes + 1
+    beta = Column(Float, default=1.0, nullable=False)  # Failures + 1
+    
+    # Statistics
+    total_pulls = Column(Integer, default=0)  # Total times selected
+    total_successes = Column(Integer, default=0)  # Total positive outcomes
+    total_failures = Column(Integer, default=0)  # Total negative outcomes
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        success_rate = self.alpha / (self.alpha + self.beta) if (self.alpha + self.beta) > 0 else 0
+        return f"<BanditState(context={self.context_key}, algo={self.algorithm}, α={self.alpha:.1f}, β={self.beta:.1f}, rate={success_rate:.2%})>"

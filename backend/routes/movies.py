@@ -67,20 +67,25 @@ def get_recommendations(
     limit: int = Query(30, ge=1, le=50),
     offset: int = Query(0, ge=0),
     seed: Optional[int] = Query(None, description="Optional seed to shuffle results deterministically"),
+    use_bandit: bool = Query(True, description="Use bandit algorithm selection (A/B testing)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get personalized movie recommendations for a user
     
-    Unified recommendation algorithm that automatically:
-    - Filters out disliked genres (like Horror if you marked it)
-    - Balances your stated preferences with your ratings
-    - Provides diverse recommendations across genres
-    - Considers your recent viewing patterns
-    - Returns plenty of great movies you'll love
+    Now with intelligent algorithm selection using Thompson Sampling!
     
-    No modes or configuration needed - just works!
+    Features:
+    - Automatically selects best algorithms based on context (time, user type, etc.)
+    - Learns from user feedback (clicks, ratings, thumbs)
+    - Balances exploration (trying new algorithms) vs exploitation (using known good ones)
+    - Filters out disliked genres and low-rated movies
+    - Provides diverse recommendations across genres
+    
+    Query Parameters:
+    - use_bandit=true: Use Thompson Sampling bandit (default, A/B test)
+    - use_bandit=false: Use classic hybrid approach (control group)
     """
     
     # Verify the user is requesting their own recommendations
@@ -89,45 +94,85 @@ def get_recommendations(
     
     recommender = MovieRecommender(db)
     
-    # Use simplified hybrid approach - no aggressive context filtering
-    # Fetch a larger pool to support paging/refresh without duplicates
-    # Grow the candidate pool as the user paginates so pages can expand
-    # Add a small cushion to absorb thumbs filtering/boosting
-    pool_size = max(limit + offset + 50, 50)
-    # Reasonable upper safety cap to avoid huge queries; adjust based on load
-    pool_size = min(pool_size, 500)
-    recommendations = recommender.get_hybrid_recommendations(
-        user_id, 
-        pool_size, 
-        use_context=False,
-        use_embeddings=False,
-        use_graph=False
-    )
-
-    # Optionally shuffle using seed for deterministic reshuffling
-    if seed is not None and len(recommendations) > 1:
-        import random
-        rng = random.Random(int(seed))
-        rng.shuffle(recommendations)
-
-    # Apply offset/limit window
-    recommendations = recommendations[offset:offset + limit]
-    
-    # Track recommendations for analytics
-    try:
-        for position, movie in enumerate(recommendations, start=1):
-            recommender.track_recommendation(
+    # A/B TEST: Bandit vs Hybrid
+    if use_bandit:
+        # NEW: Thompson Sampling Bandit approach
+        pool_size = max(limit + offset + 50, 50)
+        pool_size = min(pool_size, 500)
+        
+        try:
+            result = recommender.get_bandit_recommendations(
                 user_id=user_id,
-                movie_id=movie.id,
-                algorithm='unified',
-                position=position
+                n_recommendations=pool_size
             )
-    except Exception as e:
-        # Don't fail the request if tracking fails
-        import logging
-        logging.warning(f"Failed to track recommendations: {e}")
+            
+            # Extract movies and algorithm info
+            recommendations_with_algo = result['recommendations']
+            context = result['context']
+            
+            # Apply offset/limit window
+            recommendations_with_algo = recommendations_with_algo[offset:offset + limit]
+            
+            # Track recommendations with proper algorithm attribution
+            for position, rec_data in enumerate(recommendations_with_algo, start=1):
+                try:
+                    recommender.track_recommendation(
+                        user_id=user_id,
+                        movie_id=rec_data['movie'].id,
+                        algorithm=f"bandit_{rec_data['algorithm']}",  # e.g., "bandit_svd"
+                        position=position,
+                        score=rec_data['confidence'],
+                        context=context
+                    )
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to track bandit recommendation: {e}")
+            
+            # Return just the movies (strip algorithm metadata for API response)
+            return [rec['movie'] for rec in recommendations_with_algo]
+            
+        except Exception as e:
+            # Fallback to hybrid if bandit fails
+            import logging
+            logging.error(f"Bandit recommendation failed, falling back to hybrid: {e}")
+            use_bandit = False
     
-    return recommendations
+    if not use_bandit:
+        # CONTROL: Classic hybrid approach
+        pool_size = max(limit + offset + 50, 50)
+        pool_size = min(pool_size, 500)
+        recommendations = recommender.get_hybrid_recommendations(
+            user_id, 
+            pool_size, 
+            use_context=False,
+            use_embeddings=False,
+            use_graph=False
+        )
+
+        # Optionally shuffle using seed for deterministic reshuffling
+        if seed is not None and len(recommendations) > 1:
+            import random
+            rng = random.Random(int(seed))
+            rng.shuffle(recommendations)
+
+        # Apply offset/limit window
+        recommendations = recommendations[offset:offset + limit]
+        
+        # Track recommendations for analytics
+        try:
+            for position, movie in enumerate(recommendations, start=1):
+                recommender.track_recommendation(
+                    user_id=user_id,
+                    movie_id=movie.id,
+                    algorithm='hybrid_control',
+                    position=position
+                )
+        except Exception as e:
+            # Don't fail the request if tracking fails
+            import logging
+            logging.warning(f"Failed to track recommendations: {e}")
+        
+        return recommendations
 
 # REMOVED: Old context-aware and feedback-driven endpoints
 # Everything is now unified in the main /recommendations endpoint

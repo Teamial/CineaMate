@@ -1443,6 +1443,238 @@ class MovieRecommender:
         }
     
     # =============================================================================
+    # BANDIT-BASED ALGORITHM SELECTION
+    # =============================================================================
+    
+    def get_bandit_recommendations(self, user_id: int, n_recommendations: int = 20, 
+                                   n_algorithms: int = 3) -> dict:
+        """
+        Use Thompson Sampling bandit to select and blend recommendation algorithms
+        
+        This method:
+        1. Extracts context (time, user type, etc.)
+        2. Uses bandit to select best N algorithms for this context
+        3. Generates recommendations from each selected algorithm
+        4. Blends results using confidence weights
+        5. Returns recommendations with algorithm attribution
+        
+        Args:
+            user_id: User ID
+            n_recommendations: Number of final recommendations to return
+            n_algorithms: Number of algorithms to select (default 3)
+            
+        Returns:
+            dict: {
+                'recommendations': List of (movie, algorithm, confidence) tuples,
+                'context': Context used for selection,
+                'selected_algorithms': List of (algorithm, confidence) tuples,
+                'bandit_info': Bandit state information
+            }
+        """
+        from .bandit_selector import BanditSelector
+        
+        # Initialize bandit
+        bandit = BanditSelector(self.db)
+        
+        # Extract context
+        context = bandit.extract_context(user_id)
+        logger.info(f"Bandit context for user {user_id}: {context}")
+        
+        # Select algorithms using bandit
+        selected_algorithms, confidences = bandit.select_arms(context, n_arms=n_algorithms)
+        logger.info(f"Bandit selected: {list(zip(selected_algorithms, confidences))}")
+        
+        # Map algorithm names to methods
+        algorithm_methods = {
+            'svd': self.get_svd_recommendations,
+            'embeddings': self.get_embedding_recommendations,
+            'graph': self.get_graph_recommendations,
+            'item_cf': self.get_item_based_recommendations,
+            'long_tail': self._get_long_tail_recommendations,
+            'serendipity': self._get_serendipity_recommendations
+        }
+        
+        # Generate recommendations from each selected algorithm
+        algorithm_results = {}
+        for algo, confidence in zip(selected_algorithms, confidences):
+            try:
+                method = algorithm_methods.get(algo)
+                if method:
+                    # Get extra recommendations to have a larger pool
+                    pool_size = n_recommendations * 2
+                    recommendations = method(user_id, n_recommendations=pool_size)
+                    algorithm_results[algo] = {
+                        'movies': recommendations,
+                        'confidence': confidence
+                    }
+                    logger.info(f"Algorithm {algo} generated {len(recommendations)} recommendations")
+                else:
+                    logger.warning(f"Algorithm {algo} not found, skipping")
+            except Exception as e:
+                logger.error(f"Error generating recommendations with {algo}: {e}")
+        
+        # Blend recommendations using weighted round-robin
+        blended_recommendations = []
+        seen_movie_ids = set()
+        
+        # Create iterators for each algorithm's results
+        algorithm_iters = {
+            algo: iter(data['movies']) 
+            for algo, data in algorithm_results.items()
+        }
+        
+        # Round-robin selection weighted by confidence
+        max_iterations = n_recommendations * 3  # Safety limit
+        iteration = 0
+        
+        while len(blended_recommendations) < n_recommendations and iteration < max_iterations:
+            iteration += 1
+            
+            for algo, data in algorithm_results.items():
+                if len(blended_recommendations) >= n_recommendations:
+                    break
+                
+                # Try to get next movie from this algorithm
+                try:
+                    movie = next(algorithm_iters[algo])
+                    if movie.id not in seen_movie_ids:
+                        seen_movie_ids.add(movie.id)
+                        blended_recommendations.append({
+                            'movie': movie,
+                            'algorithm': algo,
+                            'confidence': data['confidence']
+                        })
+                except StopIteration:
+                    # This algorithm exhausted
+                    continue
+        
+        # If we still need more recommendations, fall back to hybrid
+        if len(blended_recommendations) < n_recommendations:
+            logger.warning(f"Bandit only generated {len(blended_recommendations)} recommendations, filling with hybrid")
+            hybrid_recs = self.get_hybrid_recommendations(
+                user_id, 
+                n_recommendations=(n_recommendations - len(blended_recommendations))
+            )
+            for movie in hybrid_recs:
+                if movie.id not in seen_movie_ids:
+                    blended_recommendations.append({
+                        'movie': movie,
+                        'algorithm': 'hybrid_fallback',
+                        'confidence': 0.1
+                    })
+        
+        # Get bandit stats for this context
+        bandit_info = {
+            'context_key': bandit._context_to_key(context),
+            'selected_algorithms': list(zip(selected_algorithms, confidences)),
+            'stats': bandit.get_bandit_stats(context)
+        }
+        
+        return {
+            'recommendations': blended_recommendations,
+            'context': context,
+            'selected_algorithms': list(zip(selected_algorithms, confidences)),
+            'bandit_info': bandit_info
+        }
+    
+    def _get_long_tail_recommendations(self, user_id: int, n_recommendations: int = 10):
+        """
+        Get long-tail recommendations (less popular but high quality movies)
+        Focuses on diversity and discovery
+        """
+        # Get user's genre preferences
+        genre_prefs = self._get_user_genre_preferences_combined(user_id)
+        
+        # Get movies with moderate popularity (not blockbusters)
+        excluded_ids = self._get_excluded_movie_ids(user_id)
+        
+        query = self.db.query(Movie).filter(
+            Movie.id.notin_(excluded_ids),
+            Movie.vote_average >= 7.0,  # High quality
+            Movie.vote_count >= 50,  # Some validation
+            Movie.vote_count <= 500,  # Not too popular (long tail)
+        )
+        
+        # Filter by preferred genres if available
+        if genre_prefs:
+            liked_genres = [g for g, score in genre_prefs.items() if score > 0]
+            if liked_genres:
+                # Use JSONB containment operator
+                from sqlalchemy import cast, String
+                movies = []
+                for movie in query.all():
+                    if movie.genres:
+                        movie_genres = [g['name'] for g in movie.genres]
+                        if any(g in movie_genres for g in liked_genres):
+                            movies.append(movie)
+                
+                # Sort by diversity score (genre variety)
+                if len(movies) > n_recommendations:
+                    movies = self._apply_enhanced_diversification(movies, user_id, None)
+                
+                return movies[:n_recommendations]
+        
+        # No preference, return diverse long-tail movies
+        movies = query.order_by(desc(Movie.vote_average)).limit(n_recommendations * 2).all()
+        return self._apply_enhanced_diversification(movies, user_id, None)[:n_recommendations]
+    
+    def _get_serendipity_recommendations(self, user_id: int, n_recommendations: int = 10):
+        """
+        Get serendipitous recommendations (unexpected but quality movies)
+        Uses genre expansion and keyword-based discovery
+        """
+        from sqlalchemy import func, cast, String
+        
+        # Get user's primary genres
+        user_genres = self._get_user_genre_preferences_combined(user_id)
+        excluded_ids = self._get_excluded_movie_ids(user_id)
+        
+        # Get complementary genres (expand beyond comfort zone)
+        complementary_genres = {
+            'Action': ['Thriller', 'Crime', 'Adventure'],
+            'Comedy': ['Romance', 'Family', 'Animation'],
+            'Drama': ['Biography', 'History', 'Mystery'],
+            'Sci-Fi': ['Fantasy', 'Adventure', 'Mystery'],
+            'Horror': ['Thriller', 'Mystery', 'Fantasy'],
+        }
+        
+        # Find genres to explore
+        explore_genres = set()
+        if user_genres:
+            for genre in user_genres.keys():
+                if genre in complementary_genres:
+                    explore_genres.update(complementary_genres[genre])
+        
+        # If no user history, use highly-rated diverse movies
+        if not explore_genres:
+            movies = self.db.query(Movie).filter(
+                Movie.id.notin_(excluded_ids),
+                Movie.vote_average >= 7.5,
+                Movie.vote_count >= 100
+            ).order_by(desc(Movie.vote_average)).limit(n_recommendations * 2).all()
+            return self._apply_enhanced_diversification(movies, user_id, None)[:n_recommendations]
+        
+        # Find high-quality movies in complementary genres
+        movies = []
+        all_movies = self.db.query(Movie).filter(
+            Movie.id.notin_(excluded_ids),
+            Movie.vote_average >= 7.0,
+            Movie.vote_count >= 100
+        ).all()
+        
+        for movie in all_movies:
+            if movie.genres:
+                movie_genres = [g['name'] for g in movie.genres]
+                if any(g in explore_genres for g in movie_genres):
+                    movies.append(movie)
+        
+        # Sort by rating and diversify
+        movies = sorted(movies, key=lambda m: m.vote_average, reverse=True)
+        movies = self._apply_enhanced_diversification(movies[:n_recommendations * 2], user_id, None)
+        
+        return movies[:n_recommendations]
+    
+    # =============================================================================
     # CONTINUOUS LEARNING & A/B TESTING
     # =============================================================================
     
