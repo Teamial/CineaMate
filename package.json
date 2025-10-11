@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "concurrently \"source .venv/bin/activate && uvicorn backend.main:app --reload --port 8000\" \"cd frontend && npm run dev\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
-    "start": "./start.sh",
-    "stop": "./stop.sh",
-    "restart": "./restart.sh"
+    "start": "./backend/start.sh",
+    "start:local": "./scripts/start.sh",
+    "stop": "./scripts/stop.sh",
+    "restart": "./scripts/restart.sh"
   },
   "dependencies": {
     "axios": "^1.12.2",

@@ -1,2 +1,2 @@
-web: ./start.sh
+web: ./backend/start.sh
 
