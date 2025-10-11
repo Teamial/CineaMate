@@ -44,6 +44,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy backend code
 COPY backend /app/backend
 
+# Copy root-level modules that scheduler needs
+COPY tools/movie_pipeline.py /app/movie_pipeline.py
+
 # Make start script executable
 RUN chmod +x /app/backend/start.sh
 
