@@ -1,2 +1,0 @@
-web: ./backend/start.sh
-
