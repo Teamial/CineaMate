@@ -1,0 +1,89 @@
+{
+  "timestamp": "2025-10-11T20:46:23.798375",
+  "period_days": 7,
+  "checks": {
+    "diversity": {
+      "status": "warning",
+      "metrics": {
+        "gini_coefficient": 0.0,
+        "long_tail_percentage": 0.43776824034334766,
+        "genre_diversity": 0.07725321888412018
+      },
+      "alerts": [
+        {
+          "severity": "warning",
+          "metric": "genre_diversity",
+          "value": 0.07725321888412018,
+          "threshold": 0.3,
+          "message": "Genre diversity (7.73%) below threshold (30.00%)"
+        }
+      ]
+    },
+    "quality": {
+      "status": "ok",
+      "metrics": {
+        "ctr": 0.0,
+        "avg_rating": 4.117647058823529,
+        "total_events": 398
+      },
+      "alerts": []
+    },
+    "algorithm_balance": {
+      "status": "warning",
+      "algorithm_rates": {
+        "unified": 0.9899497487437185,
+        "manual": 0.010050251256281407
+      },
+      "alerts": [
+        {
+          "severity": "warning",
+          "metric": "algorithm_dominance",
+          "value": 0.9899497487437185,
+          "threshold": 0.7,
+          "message": "Algorithm 'unified' dominates with 98.99% of recommendations (threshold: 70.00%)"
+        }
+      ]
+    },
+    "engagement": {
+      "status": "warning",
+      "metrics": {
+        "ctr": 0.0,
+        "avg_rating": 4.117647058823529,
+        "total_events": 398
+      },
+      "alerts": [
+        {
+          "severity": "warning",
+          "metric": "ctr",
+          "value": 0.0,
+          "threshold": 0.1,
+          "message": "CTR (0.00%) below threshold (10.00%)"
+        }
+      ]
+    }
+  },
+  "alerts": [
+    {
+      "severity": "warning",
+      "metric": "genre_diversity",
+      "value": 0.07725321888412018,
+      "threshold": 0.3,
+      "message": "Genre diversity (7.73%) below threshold (30.00%)"
+    },
+    {
+      "severity": "warning",
+      "metric": "algorithm_dominance",
+      "value": 0.9899497487437185,
+      "threshold": 0.7,
+      "message": "Algorithm 'unified' dominates with 98.99% of recommendations (threshold: 70.00%)"
+    },
+    {
+      "severity": "warning",
+      "metric": "ctr",
+      "value": 0.0,
+      "threshold": 0.1,
+      "message": "CTR (0.00%) below threshold (10.00%)"
+    }
+  ],
+  "overall_status": "warning"
+}
