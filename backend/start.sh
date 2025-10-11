@@ -19,5 +19,5 @@ echo "🔧 Creating database tables..."
 $PYTHON_CMD -c "from backend.database import engine, Base; Base.metadata.create_all(bind=engine)"
 
 # Start the FastAPI app
-echo "🚀 Starting FastAPI server..."
-exec $PYTHON_CMD -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
+echo "🚀 Starting FastAPI server on port ${PORT:-8000}..."
+exec $PYTHON_CMD -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'

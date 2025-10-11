@@ -57,4 +57,4 @@ USER app
 EXPOSE 8000
 
 # Run database initialization and start server
-CMD ["/bin/bash", "-c", "python backend/init_db.py || true && python -c 'from backend.database import engine, Base; Base.metadata.create_all(bind=engine)' && python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["/bin/bash", "/app/backend/start.sh"]
