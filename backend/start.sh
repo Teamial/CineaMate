@@ -28,6 +28,11 @@ if ! $PYTHON_CMD backend/migrate_add_bandit_experiment.py; then
     echo "⚠️ Bandit migration failed, continuing anyway..."
 fi
 
+echo "🔧 Running recommendation_events migration..."
+if ! $PYTHON_CMD backend/migrate_recommendation_events.py; then
+    echo "⚠️ Recommendation events migration failed, continuing anyway..."
+fi
+
 echo "🔧 Running quick database fix..."
 if ! $PYTHON_CMD backend/quick_fix_db_sqlalchemy.py; then
     echo "⚠️ Quick database fix failed, continuing anyway..."
