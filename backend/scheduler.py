@@ -382,6 +382,10 @@ class PipelineScheduler:
                 'trigger': str(job.trigger)
             })
         return jobs
+    
+    def add_job(self, *args, **kwargs):
+        """Add a job to the scheduler (delegate to underlying scheduler)"""
+        return self.scheduler.add_job(*args, **kwargs)
 
 
 # Global scheduler instance
