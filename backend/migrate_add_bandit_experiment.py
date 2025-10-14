@@ -34,6 +34,14 @@ def check_table_exists(table_name: str) -> bool:
     inspector = inspect(engine)
     return table_name in inspector.get_table_names()
 
+def check_column_exists(table_name: str, column_name: str) -> bool:
+    """Check if a column exists in a table"""
+    inspector = inspect(engine)
+    if table_name not in inspector.get_table_names():
+        return False
+    columns = [col['name'] for col in inspector.get_columns(table_name)]
+    return column_name in columns
+
 def run_migration():
     """Execute the bandit experiment migration"""
     
@@ -107,7 +115,7 @@ def run_migration():
             CREATE TABLE arm_catalog (
                 arm_id VARCHAR(50) PRIMARY KEY,
                 title VARCHAR(200) NOT NULL,
-                metadata JSONB NULL,
+                config JSONB NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
         """))
@@ -135,17 +143,36 @@ def run_migration():
         logger.info("Extending recommendation_events table...")
         
         if check_table_exists('recommendation_events'):
-            db.execute(text("""
-                ALTER TABLE recommendation_events 
-                ADD COLUMN experiment_id UUID NULL REFERENCES experiments(id),
-                ADD COLUMN policy VARCHAR(20) NULL,
-                ADD COLUMN arm_id VARCHAR(50) NULL,
-                ADD COLUMN p_score FLOAT NULL,
-                ADD COLUMN latency_ms INTEGER NULL,
-                ADD COLUMN reward FLOAT NULL,
-                ADD COLUMN served_at TIMESTAMPTZ NULL;
-            """))
-            logger.info("Extended recommendation_events table with bandit columns")
+            # Check which columns already exist and only add missing ones
+            columns_to_add = []
+            
+            if not check_column_exists('recommendation_events', 'experiment_id'):
+                columns_to_add.append("ADD COLUMN experiment_id UUID NULL REFERENCES experiments(id)")
+            
+            if not check_column_exists('recommendation_events', 'policy'):
+                columns_to_add.append("ADD COLUMN policy VARCHAR(20) NULL")
+            
+            if not check_column_exists('recommendation_events', 'arm_id'):
+                columns_to_add.append("ADD COLUMN arm_id VARCHAR(50) NULL")
+            
+            if not check_column_exists('recommendation_events', 'p_score'):
+                columns_to_add.append("ADD COLUMN p_score FLOAT NULL")
+            
+            if not check_column_exists('recommendation_events', 'latency_ms'):
+                columns_to_add.append("ADD COLUMN latency_ms INTEGER NULL")
+            
+            if not check_column_exists('recommendation_events', 'reward'):
+                columns_to_add.append("ADD COLUMN reward FLOAT NULL")
+            
+            if not check_column_exists('recommendation_events', 'served_at'):
+                columns_to_add.append("ADD COLUMN served_at TIMESTAMPTZ NULL")
+            
+            if columns_to_add:
+                alter_sql = f"ALTER TABLE recommendation_events {', '.join(columns_to_add)};"
+                db.execute(text(alter_sql))
+                logger.info(f"Extended recommendation_events table with {len(columns_to_add)} new columns")
+            else:
+                logger.info("All bandit columns already exist in recommendation_events table")
         else:
             logger.warning("recommendation_events table does not exist. Skipping extension.")
         
@@ -183,12 +210,12 @@ def run_migration():
             ('hybrid', 'Hybrid Baseline', '{"description": "Traditional hybrid approach (SVD + Item-CF + Content)", "type": "hybrid"}')
         ]
         
-        for arm_id, title, metadata in arm_catalog_data:
+        for arm_id, title, config in arm_catalog_data:
             db.execute(text("""
-                INSERT INTO arm_catalog (arm_id, title, metadata) 
-                VALUES (:arm_id, :title, :metadata::jsonb)
+                INSERT INTO arm_catalog (arm_id, title, config) 
+                VALUES (:arm_id, :title, :config::jsonb)
                 ON CONFLICT (arm_id) DO NOTHING
-            """), {"arm_id": arm_id, "title": title, "metadata": metadata})
+            """), {"arm_id": arm_id, "title": title, "config": config})
         
         # 8. Backfill existing recommendation_events
         logger.info("Backfilling existing recommendation_events...")

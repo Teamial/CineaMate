@@ -293,7 +293,7 @@ class ArmCatalog(Base):
     
     arm_id = Column(String(50), primary_key=True, index=True)  # 'svd', 'embeddings', 'graph', etc.
     title = Column(String(200), nullable=False)
-    metadata = Column(JSON, nullable=True)  # Algorithm config, description
+    config = Column(JSON, nullable=True)  # Algorithm config, description (renamed from metadata)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     def __repr__(self):
