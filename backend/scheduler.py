@@ -30,21 +30,44 @@ if TOOLS_PATH not in sys.path:
 
 # Import pipeline from tools directory
 try:
+    # Try direct import first
     from tools.movie_pipeline import MovieETLPipeline
     logger.info("✅ MovieETLPipeline imported successfully")
-except ImportError as e:
-    logger.warning(f"⚠️ Could not import MovieETLPipeline: {e}")
-    MovieETLPipeline = None
+except ImportError:
+    try:
+        # Fallback: import directly from file
+        import importlib.util
+        movie_pipeline_path = os.path.join(TOOLS_PATH, 'movie_pipeline.py')
+        spec = importlib.util.spec_from_file_location("movie_pipeline", movie_pipeline_path)
+        movie_pipeline_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(movie_pipeline_module)
+        MovieETLPipeline = movie_pipeline_module.MovieETLPipeline
+        logger.info("✅ MovieETLPipeline imported successfully (direct file import)")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not import MovieETLPipeline: {e}")
+        MovieETLPipeline = None
 
 # Optional historical importer; only schedule related jobs if import succeeds
 try:
+    # Try direct import first
     from tools.historical_movie_import import HistoricalMovieImporter
     HAS_HISTORICAL_IMPORTER = True
     logger.info("✅ HistoricalMovieImporter imported successfully")
-except Exception as e:
-    logger.warning(f"⚠️ Could not import HistoricalMovieImporter: {e}")
-    HistoricalMovieImporter = None  # type: ignore
-    HAS_HISTORICAL_IMPORTER = False
+except ImportError:
+    try:
+        # Fallback: import directly from file
+        import importlib.util
+        historical_import_path = os.path.join(TOOLS_PATH, 'historical_movie_import.py')
+        spec = importlib.util.spec_from_file_location("historical_movie_import", historical_import_path)
+        historical_import_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(historical_import_module)
+        HistoricalMovieImporter = historical_import_module.HistoricalMovieImporter
+        HAS_HISTORICAL_IMPORTER = True
+        logger.info("✅ HistoricalMovieImporter imported successfully (direct file import)")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not import HistoricalMovieImporter: {e}")
+        HistoricalMovieImporter = None  # type: ignore
+        HAS_HISTORICAL_IMPORTER = False
 
 load_dotenv()
 
