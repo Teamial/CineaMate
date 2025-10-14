@@ -26,7 +26,7 @@ import json
 
 from ..database import SessionLocal
 from ..models import Experiment
-from .guardrails import GuardrailsEngine, GuardrailStatus
+from ..ml.guardrails import GuardrailsEngine, GuardrailStatus
 
 logger = logging.getLogger(__name__)
 

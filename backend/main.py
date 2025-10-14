@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from fastapi.responses import RedirectResponse
 from .database import engine, Base
-from .routes import movies, ratings, auth, user_features, pipeline, onboarding, analytics
+from .routes import movies, ratings, auth, user_features, pipeline, onboarding, analytics, experiments
 import logging
 
 # Configure logging
@@ -38,6 +38,7 @@ app.include_router(user_features.router)
 app.include_router(pipeline.router)
 app.include_router(onboarding.router)
 app.include_router(analytics.router)
+app.include_router(experiments.router)
 
 # Initialize scheduler on startup
 @app.on_event("startup")
@@ -51,6 +52,16 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ Could not start scheduler: {e}")
         logger.warning("Pipeline scheduler will need to be started manually")
+    
+    # Also try to start guardrails scheduler
+    try:
+        from backend.scheduler.guardrails_scheduler import setup_guardrails_scheduler
+        from .scheduler import get_scheduler
+        scheduler = get_scheduler()
+        setup_guardrails_scheduler(scheduler)
+        logger.info("✅ Guardrails scheduler configured")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not configure guardrails scheduler: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
