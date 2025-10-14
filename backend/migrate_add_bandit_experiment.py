@@ -42,6 +42,12 @@ def check_column_exists(table_name: str, column_name: str) -> bool:
     columns = [col['name'] for col in inspector.get_columns(table_name)]
     return column_name in columns
 
+def check_index_exists(index_name: str) -> bool:
+    """Check if an index exists in the database"""
+    inspector = inspect(engine)
+    indexes = inspector.get_indexes()
+    return any(idx['name'] == index_name for idx in indexes)
+
 def run_migration():
     """Execute the bandit experiment migration"""
     
@@ -179,24 +185,42 @@ def run_migration():
         # 6. Create indexes for performance
         logger.info("Creating indexes...")
         
-        # Experiments indexes
-        db.execute(text("CREATE INDEX idx_experiments_start_at ON experiments(start_at);"))
-        db.execute(text("CREATE INDEX idx_experiments_end_at ON experiments(end_at);"))
+        # Define all indexes to create
+        indexes_to_create = [
+            # Experiments indexes
+            ("idx_experiments_start_at", "CREATE INDEX idx_experiments_start_at ON experiments(start_at);"),
+            ("idx_experiments_end_at", "CREATE INDEX idx_experiments_end_at ON experiments(end_at);"),
+            
+            # Policy assignments indexes
+            ("idx_policy_assignments_experiment_id", "CREATE INDEX idx_policy_assignments_experiment_id ON policy_assignments(experiment_id);"),
+            ("idx_policy_assignments_user_id", "CREATE INDEX idx_policy_assignments_user_id ON policy_assignments(user_id);"),
+            ("idx_policy_assignments_policy", "CREATE INDEX idx_policy_assignments_policy ON policy_assignments(policy);"),
+            
+            # Policy states indexes
+            ("idx_policy_states_policy_context", "CREATE INDEX idx_policy_states_policy_context ON policy_states(policy, context_key);"),
+            ("idx_policy_states_arm_id", "CREATE INDEX idx_policy_states_arm_id ON policy_states(arm_id);"),
+            
+            # Recommendation events indexes
+            ("idx_recommendation_events_experiment_id", "CREATE INDEX idx_recommendation_events_experiment_id ON recommendation_events(experiment_id);"),
+            ("idx_recommendation_events_policy", "CREATE INDEX idx_recommendation_events_policy ON recommendation_events(policy);"),
+            ("idx_recommendation_events_arm_id", "CREATE INDEX idx_recommendation_events_arm_id ON recommendation_events(arm_id);"),
+            ("idx_recommendation_events_served_at", "CREATE INDEX idx_recommendation_events_served_at ON recommendation_events(served_at);")
+        ]
         
-        # Policy assignments indexes
-        db.execute(text("CREATE INDEX idx_policy_assignments_experiment_id ON policy_assignments(experiment_id);"))
-        db.execute(text("CREATE INDEX idx_policy_assignments_user_id ON policy_assignments(user_id);"))
-        db.execute(text("CREATE INDEX idx_policy_assignments_policy ON policy_assignments(policy);"))
+        # Create indexes only if they don't exist
+        indexes_created = 0
+        for index_name, create_sql in indexes_to_create:
+            if not check_index_exists(index_name):
+                try:
+                    db.execute(text(create_sql))
+                    indexes_created += 1
+                    logger.debug(f"Created index: {index_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to create index {index_name}: {e}")
+            else:
+                logger.debug(f"Index {index_name} already exists, skipping")
         
-        # Policy states indexes
-        db.execute(text("CREATE INDEX idx_policy_states_policy_context ON policy_states(policy, context_key);"))
-        db.execute(text("CREATE INDEX idx_policy_states_arm_id ON policy_states(arm_id);"))
-        
-        # Recommendation events indexes
-        db.execute(text("CREATE INDEX idx_recommendation_events_experiment_id ON recommendation_events(experiment_id);"))
-        db.execute(text("CREATE INDEX idx_recommendation_events_policy ON recommendation_events(policy);"))
-        db.execute(text("CREATE INDEX idx_recommendation_events_arm_id ON recommendation_events(arm_id);"))
-        db.execute(text("CREATE INDEX idx_recommendation_events_served_at ON recommendation_events(served_at);"))
+        logger.info(f"Created {indexes_created} new indexes")
         
         # 7. Populate arm_catalog with existing algorithms
         logger.info("Populating arm_catalog...")
