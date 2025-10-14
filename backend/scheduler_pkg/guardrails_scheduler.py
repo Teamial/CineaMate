@@ -13,7 +13,7 @@ Features:
 - Configurable thresholds and rollback triggers
 
 Usage:
-    from backend.scheduler import setup_guardrails_scheduler
+    from backend.scheduler_pkg.guardrails_scheduler import setup_guardrails_scheduler
     setup_guardrails_scheduler(scheduler)
 """
 
