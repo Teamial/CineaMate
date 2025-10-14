@@ -28,19 +28,9 @@ if ! $PYTHON_CMD backend/migrate_add_bandit_experiment.py; then
     echo "⚠️ Bandit migration failed, continuing anyway..."
 fi
 
-echo "🔧 Running recommendation_events migration..."
-if ! $PYTHON_CMD backend/migrate_recommendation_events.py; then
+echo "🔧 Running recommendation_events migration (simple)..."
+if ! $PYTHON_CMD backend/migrate_recommendation_events_simple.py; then
     echo "⚠️ Recommendation events migration failed, continuing anyway..."
-fi
-
-echo "🔧 Running quick database fix..."
-if ! $PYTHON_CMD backend/quick_fix_db_sqlalchemy.py; then
-    echo "⚠️ Quick database fix failed, continuing anyway..."
-fi
-
-echo "🔧 Testing database columns..."
-if ! $PYTHON_CMD backend/test_db_columns.py; then
-    echo "⚠️ Database column test failed, continuing anyway..."
 fi
 
 # Test imports before starting the app
