@@ -19,7 +19,20 @@ echo "🔧 Creating database tables..."
 $PYTHON_CMD -c "from backend.database import engine, Base; Base.metadata.create_all(bind=engine)"
 
 echo "🔧 Running bandit experiment migration..."
-$PYTHON_CMD backend/migrate_add_bandit_experiment.py || echo "Bandit migration already applied"
+$PYTHON_CMD backend/migrate_add_bandit_experiment.py || echo "Bandit migration skipped or already applied"
+
+# Test imports before starting the app
+echo "🔧 Testing critical imports..."
+$PYTHON_CMD -c "
+try:
+    from backend.main import app
+    print('✅ FastAPI app imports successfully')
+except Exception as e:
+    print(f'❌ FastAPI app import failed: {e}')
+    import traceback
+    traceback.print_exc()
+    exit(1)
+"
 
 # Start the FastAPI app
 echo "🚀 Starting FastAPI server on port ${PORT:-8000}..."

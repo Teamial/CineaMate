@@ -18,15 +18,18 @@ if PROJECT_ROOT not in sys.path:
 # Import pipeline from tools directory
 try:
     from tools.movie_pipeline import MovieETLPipeline
-except ImportError:
-    # Fallback if tools import fails
+    logger.info("✅ MovieETLPipeline imported successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Could not import MovieETLPipeline: {e}")
     MovieETLPipeline = None
 
 # Optional historical importer; only schedule related jobs if import succeeds
 try:
     from tools.historical_movie_import import HistoricalMovieImporter
     HAS_HISTORICAL_IMPORTER = True
-except Exception:
+    logger.info("✅ HistoricalMovieImporter imported successfully")
+except Exception as e:
+    logger.warning(f"⚠️ Could not import HistoricalMovieImporter: {e}")
     HistoricalMovieImporter = None  # type: ignore
     HAS_HISTORICAL_IMPORTER = False
 

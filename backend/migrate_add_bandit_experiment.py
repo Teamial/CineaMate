@@ -41,7 +41,12 @@ def run_migration():
     logger.info("BANDIT EXPERIMENT MIGRATION")
     logger.info("="*60)
     
-    db = SessionLocal()
+    try:
+        db = SessionLocal()
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+        logger.warning("Skipping bandit migration - database not available")
+        return
     
     try:
         # Check if migration already applied
@@ -68,17 +73,33 @@ def run_migration():
         
         # 2. Create policy_assignments table
         logger.info("Creating policy_assignments table...")
-        db.execute(text("""
-            CREATE TABLE policy_assignments (
-                id SERIAL PRIMARY KEY,
-                experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                policy VARCHAR(20) NOT NULL,
-                bucket INTEGER NOT NULL CHECK (bucket >= 0 AND bucket <= 99),
-                assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE(experiment_id, user_id)
-            );
-        """))
+        
+        # Check if users table exists before creating foreign key reference
+        if not check_table_exists('users'):
+            logger.warning("Users table does not exist. Creating policy_assignments without foreign key constraint.")
+            db.execute(text("""
+                CREATE TABLE policy_assignments (
+                    id SERIAL PRIMARY KEY,
+                    experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL,
+                    policy VARCHAR(20) NOT NULL,
+                    bucket INTEGER NOT NULL CHECK (bucket >= 0 AND bucket <= 99),
+                    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE(experiment_id, user_id)
+                );
+            """))
+        else:
+            db.execute(text("""
+                CREATE TABLE policy_assignments (
+                    id SERIAL PRIMARY KEY,
+                    experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    policy VARCHAR(20) NOT NULL,
+                    bucket INTEGER NOT NULL CHECK (bucket >= 0 AND bucket <= 99),
+                    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE(experiment_id, user_id)
+                );
+            """))
         
         # 3. Create arm_catalog table
         logger.info("Creating arm_catalog table...")
@@ -112,16 +133,21 @@ def run_migration():
         
         # 5. Extend recommendation_events table
         logger.info("Extending recommendation_events table...")
-        db.execute(text("""
-            ALTER TABLE recommendation_events 
-            ADD COLUMN experiment_id UUID NULL REFERENCES experiments(id),
-            ADD COLUMN policy VARCHAR(20) NULL,
-            ADD COLUMN arm_id VARCHAR(50) NULL,
-            ADD COLUMN p_score FLOAT NULL,
-            ADD COLUMN latency_ms INTEGER NULL,
-            ADD COLUMN reward FLOAT NULL,
-            ADD COLUMN served_at TIMESTAMPTZ NULL;
-        """))
+        
+        if check_table_exists('recommendation_events'):
+            db.execute(text("""
+                ALTER TABLE recommendation_events 
+                ADD COLUMN experiment_id UUID NULL REFERENCES experiments(id),
+                ADD COLUMN policy VARCHAR(20) NULL,
+                ADD COLUMN arm_id VARCHAR(50) NULL,
+                ADD COLUMN p_score FLOAT NULL,
+                ADD COLUMN latency_ms INTEGER NULL,
+                ADD COLUMN reward FLOAT NULL,
+                ADD COLUMN served_at TIMESTAMPTZ NULL;
+            """))
+            logger.info("Extended recommendation_events table with bandit columns")
+        else:
+            logger.warning("recommendation_events table does not exist. Skipping extension.")
         
         # 6. Create indexes for performance
         logger.info("Creating indexes...")
