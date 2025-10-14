@@ -163,19 +163,19 @@ class RecommendationEvent(Base):
     thumbs_down = Column(Boolean, default=False, index=True)
     thumbs_down_at = Column(DateTime, nullable=True)
     
-    # Bandit experiment fields
-    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id"), nullable=True, index=True)
-    policy = Column(String(20), nullable=True, index=True)  # 'thompson', 'egreedy', 'ucb'
-    arm_id = Column(String(50), nullable=True, index=True)  # Stable algorithm identifier
-    p_score = Column(Float, nullable=True)  # Propensity score for IPS
-    latency_ms = Column(Integer, nullable=True)  # Selection latency
-    reward = Column(Float, nullable=True)  # Computed reward (0-1 or scaled)
-    served_at = Column(DateTime, nullable=True, index=True)  # When recommendation was served
+    # Bandit experiment fields (temporarily disabled until database migration)
+    # experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id"), nullable=True, index=True)
+    # policy = Column(String(20), nullable=True, index=True)  # 'thompson', 'egreedy', 'ucb'
+    # arm_id = Column(String(50), nullable=True, index=True)  # Stable algorithm identifier
+    # p_score = Column(Float, nullable=True)  # Propensity score for IPS
+    # latency_ms = Column(Integer, nullable=True)  # Selection latency
+    # reward = Column(Float, nullable=True)  # Computed reward (0-1 or scaled)
+    # served_at = Column(DateTime, nullable=True, index=True)  # When recommendation was served
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
-    # Relationships
-    experiment = relationship("Experiment", back_populates="events")
+    # Relationships (temporarily disabled until database migration)
+    # experiment = relationship("Experiment", back_populates="events")
     
     def __repr__(self):
         return f"<RecommendationEvent(user={self.user_id}, movie={self.movie_id}, algo={self.algorithm})>"
