@@ -1,21 +1,21 @@
 {
-  "timestamp": "2025-10-11T23:51:39.001997",
+  "timestamp": "2025-10-12T13:00:00.867005",
   "period_days": 7,
   "checks": {
     "diversity": {
       "status": "warning",
       "metrics": {
         "gini_coefficient": 0.0,
-        "long_tail_percentage": 0.4385245901639344,
-        "genre_diversity": 0.07377049180327869
+        "long_tail_percentage": 0.4308300395256917,
+        "genre_diversity": 0.07114624505928854
       },
       "alerts": [
         {
           "severity": "warning",
           "metric": "genre_diversity",
-          "value": 0.07377049180327869,
+          "value": 0.07114624505928854,
           "threshold": 0.3,
-          "message": "Genre diversity (7.38%) below threshold (30.00%)"
+          "message": "Genre diversity (7.11%) below threshold (30.00%)"
         }
       ]
     },
@@ -23,26 +23,30 @@
       "status": "ok",
       "metrics": {
         "ctr": 0.0,
-        "avg_rating": 4.190476190476191,
-        "total_events": 529
+        "avg_rating": 4.208333333333333,
+        "total_events": 681
       },
       "alerts": []
     },
     "algorithm_balance": {
       "status": "warning",
       "algorithm_rates": {
-        "unified": 0.9527410207939508,
-        "manual": 0.007561436672967864,
-        "bandit_hybrid_fallback": 0.034026465028355386,
-        "bandit_embeddings": 0.005671077504725898
+        "unified": 0.7400881057268722,
+        "manual": 0.005873715124816446,
+        "bandit_hybrid_fallback": 0.19823788546255505,
+        "bandit_embeddings": 0.004405286343612335,
+        "bandit_svd": 0.014684287812041116,
+        "bandit_graph": 0.004405286343612335,
+        "bandit_serendipity": 0.02936857562408223,
+        "bandit_item_cf": 0.002936857562408223
       },
       "alerts": [
         {
           "severity": "warning",
           "metric": "algorithm_dominance",
-          "value": 0.9527410207939508,
+          "value": 0.7400881057268722,
           "threshold": 0.7,
-          "message": "Algorithm 'unified' dominates with 95.27% of recommendations (threshold: 70.00%)"
+          "message": "Algorithm 'unified' dominates with 74.01% of recommendations (threshold: 70.00%)"
         }
       ]
     },
@@ -50,8 +54,8 @@
       "status": "warning",
       "metrics": {
         "ctr": 0.0,
-        "avg_rating": 4.190476190476191,
-        "total_events": 529
+        "avg_rating": 4.208333333333333,
+        "total_events": 681
       },
       "alerts": [
         {
@@ -68,16 +72,16 @@
     {
       "severity": "warning",
       "metric": "genre_diversity",
-      "value": 0.07377049180327869,
+      "value": 0.07114624505928854,
       "threshold": 0.3,
-      "message": "Genre diversity (7.38%) below threshold (30.00%)"
+      "message": "Genre diversity (7.11%) below threshold (30.00%)"
     },
     {
       "severity": "warning",
       "metric": "algorithm_dominance",
-      "value": 0.9527410207939508,
+      "value": 0.7400881057268722,
       "threshold": 0.7,
-      "message": "Algorithm 'unified' dominates with 95.27% of recommendations (threshold: 70.00%)"
+      "message": "Algorithm 'unified' dominates with 74.01% of recommendations (threshold: 70.00%)"
     },
     {
       "severity": "warning",

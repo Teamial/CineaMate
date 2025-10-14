@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_, String
 from typing import Optional, List
+from datetime import datetime
 from ..database import get_db
 from ..models import Movie as MovieModel, Genre as GenreModel, User
 from ..schemas import Movie, MovieList, Genre
@@ -68,23 +69,26 @@ def get_recommendations(
     offset: int = Query(0, ge=0),
     seed: Optional[int] = Query(None, description="Optional seed to shuffle results deterministically"),
     use_bandit: bool = Query(True, description="Use bandit algorithm selection (A/B testing)"),
+    experiment_id: Optional[str] = Query(None, description="Experiment ID for bandit testing"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get personalized movie recommendations for a user
     
-    Now with intelligent algorithm selection using Thompson Sampling!
+    Now with multi-armed bandit experimentation!
     
     Features:
-    - Automatically selects best algorithms based on context (time, user type, etc.)
+    - Supports Thompson Sampling, ε-greedy, and UCB1 policies
+    - Deterministic user-to-policy assignment via experiments
     - Learns from user feedback (clicks, ratings, thumbs)
     - Balances exploration (trying new algorithms) vs exploitation (using known good ones)
     - Filters out disliked genres and low-rated movies
     - Provides diverse recommendations across genres
     
     Query Parameters:
-    - use_bandit=true: Use Thompson Sampling bandit (default, A/B test)
+    - experiment_id: UUID of active experiment (optional)
+    - use_bandit=true: Use bandit algorithm selection (default, A/B test)
     - use_bandit=false: Use classic hybrid approach (control group)
     """
     
@@ -94,7 +98,96 @@ def get_recommendations(
     
     recommender = MovieRecommender(db)
     
-    # A/B TEST: Bandit vs Hybrid
+    # Handle experiment-based bandit selection
+    if use_bandit and experiment_id:
+        try:
+            import uuid
+            exp_uuid = uuid.UUID(experiment_id)
+            
+            # Import experiment manager and policy system
+            from ..ml.experiment_manager import ExperimentManager
+            from ..ml.policies import get_policy
+            
+            # Get experiment and assign user to policy
+            manager = ExperimentManager(db)
+            policies = ['thompson', 'egreedy', 'ucb']
+            
+            assigned_policy, bucket = manager.assign_user_to_policy(exp_uuid, user_id, policies)
+            
+            # Get policy instance
+            policy = get_policy(assigned_policy, db)
+            
+            # Extract user context
+            context = {
+                'time_period': 'evening',  # TODO: Extract from request
+                'day_of_week': 'weekend',  # TODO: Extract from request
+                'user_type': 'regular',    # TODO: Extract from user data
+                'genre_saturation': 'low',
+                'session_position': 'middle'
+            }
+            
+            # Get available arms (algorithms)
+            arms = ['svd', 'embeddings', 'graph', 'item_cf', 'long_tail', 'serendipity']
+            
+            # Select arm using policy
+            import time
+            start_time = time.time()
+            policy_result = policy.select(context, arms)
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            # Generate recommendations using selected arm
+            selected_arm = policy_result.arm_id
+            pool_size = max(limit + offset + 50, 50)
+            pool_size = min(pool_size, 500)
+            
+            # Map arm to recommendation method
+            arm_methods = {
+                'svd': recommender.get_svd_recommendations,
+                'embeddings': recommender.get_embedding_recommendations,
+                'graph': recommender.get_graph_recommendations,
+                'item_cf': recommender.get_item_cf_recommendations,
+                'long_tail': recommender.get_long_tail_recommendations,
+                'serendipity': recommender.get_serendipity_recommendations
+            }
+            
+            if selected_arm in arm_methods:
+                recommendations = arm_methods[selected_arm](user_id, pool_size)
+            else:
+                # Fallback to hybrid
+                recommendations = recommender.get_hybrid_recommendations(user_id, pool_size)
+            
+            # Apply offset/limit window
+            recommendations = recommendations[offset:offset + limit]
+            
+            # Track recommendations with experiment context
+            for position, movie in enumerate(recommendations, start=1):
+                try:
+                    recommender.track_recommendation(
+                        user_id=user_id,
+                        movie_id=movie.id,
+                        algorithm=f"experiment_{assigned_policy}_{selected_arm}",
+                        position=position,
+                        score=policy_result.confidence,
+                        context=context,
+                        experiment_id=exp_uuid,
+                        policy=assigned_policy,
+                        arm_id=selected_arm,
+                        p_score=policy_result.p_score,
+                        latency_ms=latency_ms,
+                        served_at=datetime.utcnow()
+                    )
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to track experiment recommendation: {e}")
+            
+            return recommendations
+            
+        except Exception as e:
+            import logging
+            logging.error(f"Experiment-based bandit failed, falling back to hybrid: {e}")
+            use_bandit = False
+    
+    # A/B TEST: Bandit vs Hybrid (legacy mode)
     if use_bandit:
         # NEW: Thompson Sampling Bandit approach
         pool_size = max(limit + offset + 50, 50)

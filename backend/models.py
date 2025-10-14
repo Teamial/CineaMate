@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Float, Date, Text, ForeignKey, DateTime, JSON, Boolean, BigInteger
+from sqlalchemy import Column, Integer, String, Float, Date, Text, ForeignKey, DateTime, JSON, Boolean, BigInteger, UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
 from pgvector.sqlalchemy import Vector
+import uuid
 
 class Movie(Base):
     __tablename__ = "movies"
@@ -162,7 +163,19 @@ class RecommendationEvent(Base):
     thumbs_down = Column(Boolean, default=False, index=True)
     thumbs_down_at = Column(DateTime, nullable=True)
     
+    # Bandit experiment fields
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id"), nullable=True, index=True)
+    policy = Column(String(20), nullable=True, index=True)  # 'thompson', 'egreedy', 'ucb'
+    arm_id = Column(String(50), nullable=True, index=True)  # Stable algorithm identifier
+    p_score = Column(Float, nullable=True)  # Propensity score for IPS
+    latency_ms = Column(Integer, nullable=True)  # Selection latency
+    reward = Column(Float, nullable=True)  # Computed reward (0-1 or scaled)
+    served_at = Column(DateTime, nullable=True, index=True)  # When recommendation was served
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    experiment = relationship("Experiment", back_populates="events")
     
     def __repr__(self):
         return f"<RecommendationEvent(user={self.user_id}, movie={self.movie_id}, algo={self.algorithm})>"
@@ -231,3 +244,84 @@ class BanditState(Base):
     def __repr__(self):
         success_rate = self.alpha / (self.alpha + self.beta) if (self.alpha + self.beta) > 0 else 0
         return f"<BanditState(context={self.context_key}, algo={self.algorithm}, α={self.alpha:.1f}, β={self.beta:.1f}, rate={success_rate:.2%})>"
+
+# =============================================================================
+# BANDIT EXPERIMENT MODELS
+# =============================================================================
+
+class Experiment(Base):
+    """Track A/B experiments for bandit policies"""
+    __tablename__ = "experiments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    name = Column(String(200), nullable=False)
+    start_at = Column(DateTime, nullable=False, index=True)
+    end_at = Column(DateTime, nullable=True, index=True)
+    traffic_pct = Column(Float, nullable=False, default=1.0)  # Percentage of traffic to include
+    default_policy = Column(String(20), nullable=False, default='thompson')
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    assignments = relationship("PolicyAssignment", back_populates="experiment", cascade="all, delete-orphan")
+    events = relationship("RecommendationEvent", back_populates="experiment")
+    
+    def __repr__(self):
+        return f"<Experiment(id={self.id}, name={self.name}, traffic={self.traffic_pct:.1%})>"
+
+class PolicyAssignment(Base):
+    """Track deterministic user-to-policy assignments for experiments"""
+    __tablename__ = "policy_assignments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy = Column(String(20), nullable=False, index=True)  # 'thompson', 'egreedy', 'ucb'
+    bucket = Column(Integer, nullable=False)  # Hash bucket 0-99 for traffic allocation
+    assigned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    experiment = relationship("Experiment", back_populates="assignments")
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f"<PolicyAssignment(exp={self.experiment_id}, user={self.user_id}, policy={self.policy}, bucket={self.bucket})>"
+
+class ArmCatalog(Base):
+    """Stable catalog of recommendation arms (algorithms)"""
+    __tablename__ = "arm_catalog"
+    
+    arm_id = Column(String(50), primary_key=True, index=True)  # 'svd', 'embeddings', 'graph', etc.
+    title = Column(String(200), nullable=False)
+    metadata = Column(JSON, nullable=True)  # Algorithm config, description
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<ArmCatalog(arm_id={self.arm_id}, title={self.title})>"
+
+class PolicyState(Base):
+    """Track per-policy state for bandit algorithms"""
+    __tablename__ = "policy_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    policy = Column(String(20), nullable=False, index=True)  # 'thompson', 'egreedy', 'ucb'
+    arm_id = Column(String(50), nullable=False, index=True)
+    context_key = Column(String(200), nullable=False, default='default')  # Hashed context for contextual bandits
+    
+    # Statistics
+    count = Column(Integer, nullable=False, default=0)  # Total selections
+    sum_reward = Column(Float, nullable=False, default=0.0)  # Cumulative reward
+    mean_reward = Column(Float, nullable=False, default=0.0)  # Average reward
+    
+    # Thompson Sampling parameters
+    alpha = Column(Float, nullable=False, default=1.0)  # Successes + 1
+    beta = Column(Float, nullable=False, default=1.0)  # Failures + 1
+    
+    # UCB tracking
+    last_selected_at = Column(DateTime, nullable=True)
+    
+    # Timestamps
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<PolicyState(policy={self.policy}, arm={self.arm_id}, context={self.context_key}, count={self.count}, mean={self.mean_reward:.3f})>"
