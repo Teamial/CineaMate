@@ -73,47 +73,51 @@ try:
         logger.info(f"psycopg2 version: {psycopg2.__version__}")
     except ImportError as e:
         logger.error(f"psycopg2 not available: {e}")
-        raise ImportError("psycopg2-binary is not installed or not accessible")
-    
-    # Ensure DATABASE_URL uses correct format for SQLAlchemy (force postgresql scheme)
-    db_url = DATABASE_URL
-    try:
-        parsed_url = urlparse(db_url)
-        if parsed_url.scheme == 'postgres':
-            parsed_url = parsed_url._replace(scheme='postgresql')
-            db_url = urlunparse(parsed_url)
-            logger.info("Rewrote DATABASE_URL scheme postgres -> postgresql via urlparse")
-        elif db_url.startswith('postgresql+psycopg2://'):
-            db_url = db_url.replace('postgresql+psycopg2://', 'postgresql://', 1)
-            logger.info("Converted DATABASE_URL from postgresql+psycopg2:// to postgresql://")
-        elif db_url.startswith('postgres://'):
-            db_url = db_url.replace('postgres://', 'postgresql://', 1)
-            logger.info("Converted DATABASE_URL from postgres:// to postgresql://")
-    except Exception as e:
-        logger.warning(f"Could not parse DATABASE_URL for scheme fix: {e}")
-    
-    engine = create_engine(
-        db_url,
-        pool_pre_ping=True,  # Verify connections before use
-        pool_recycle=300,    # Recycle connections every 5 minutes
-        echo=False           # Set to True for SQL debugging
-    )
-    logger.info("Database engine created successfully")
-    
-    # Test the connection to ensure psycopg2 is working
-    with engine.connect() as conn:
-        result = conn.execute(text("SELECT version()"))
-        version = result.fetchone()[0]
-        logger.info(f"PostgreSQL version: {version}")
+        logger.error("Make sure psycopg2-binary is installed and libpq5 system library is available")
+        # Create a dummy engine to prevent startup failure
+        engine = create_engine("sqlite:///:memory:", echo=False)
+        logger.warning("Using in-memory SQLite as fallback - database features will be limited")
+    else:
+        # Ensure DATABASE_URL uses correct format for SQLAlchemy (force postgresql scheme)
+        db_url = DATABASE_URL
+        try:
+            parsed_url = urlparse(db_url)
+            if parsed_url.scheme == 'postgres':
+                parsed_url = parsed_url._replace(scheme='postgresql')
+                db_url = urlunparse(parsed_url)
+                logger.info("Rewrote DATABASE_URL scheme postgres -> postgresql via urlparse")
+            elif db_url.startswith('postgresql+psycopg2://'):
+                db_url = db_url.replace('postgresql+psycopg2://', 'postgresql://', 1)
+                logger.info("Converted DATABASE_URL from postgresql+psycopg2:// to postgresql://")
+            elif db_url.startswith('postgres://'):
+                db_url = db_url.replace('postgres://', 'postgresql://', 1)
+                logger.info("Converted DATABASE_URL from postgres:// to postgresql://")
+        except Exception as e:
+            logger.warning(f"Could not parse DATABASE_URL for scheme fix: {e}")
         
-except ImportError as e:
-    logger.error(f"Missing database driver: {e}")
-    logger.error("Make sure psycopg2-binary is installed and libpq5 system library is available")
-    raise
+        try:
+            engine = create_engine(
+                db_url,
+                pool_pre_ping=True,  # Verify connections before use
+                pool_recycle=300,    # Recycle connections every 5 minutes
+                echo=False           # Set to True for SQL debugging
+            )
+            logger.info("Database engine created successfully")
+            
+            # Test the connection to ensure psycopg2 is working
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT version()"))
+                version = result.fetchone()[0]
+                logger.info(f"PostgreSQL version: {version}")
+        except Exception as e:
+            logger.error(f"Failed to connect to PostgreSQL: {e}")
+            logger.warning("Using in-memory SQLite as fallback - database features will be limited")
+            engine = create_engine("sqlite:///:memory:", echo=False)
+        
 except Exception as e:
-    logger.error(f"Failed to create database engine: {e}")
-    logger.error(f"DATABASE_URL format: {db_url[:50]}...")
-    raise
+    logger.error(f"Critical database error: {e}")
+    logger.warning("Using in-memory SQLite as fallback - database features will be limited")
+    engine = create_engine("sqlite:///:memory:", echo=False)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
