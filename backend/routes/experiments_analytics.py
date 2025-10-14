@@ -97,7 +97,7 @@ def get_experiment_summary(
     """), {
         'experiment_id': experiment_id,
         'cutoff': now - timedelta(hours=24)
-    }).scalar()
+    }).scalar() or 0.0
     
     mean_reward_7d = db.execute(text("""
         SELECT AVG(reward) as avg_reward

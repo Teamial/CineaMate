@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from fastapi.responses import RedirectResponse
 from .database import engine, Base
-from .routes import movies, ratings, auth, user_features, pipeline, onboarding, analytics, experiments
+from .routes import movies, ratings, auth, user_features, pipeline, onboarding, analytics, experiments, experiments_analytics
 import logging
 
 # Configure logging
@@ -39,6 +39,7 @@ app.include_router(pipeline.router)
 app.include_router(onboarding.router)
 app.include_router(analytics.router)
 app.include_router(experiments.router)
+app.include_router(experiments_analytics.router)
 
 # Initialize scheduler on startup
 @app.on_event("startup")
@@ -77,10 +78,10 @@ async def shutdown_event():
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to Movie Recommender API v2.0",
+        "message": "Welcome to Movie Recommender API v3.0",
         "docs": "/docs",
-        "features": ["authentication", "favorites", "watchlist", "reviews", "ratings"],
-        "version": "2.0.0"
+        "features": ["authentication", "favorites", "watchlist", "reviews", "ratings", "bandit_experiments"],
+        "version": "3.0.0"
     }
 
 @app.get("/health")
