@@ -14,7 +14,12 @@ import random
 import logging
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-import redis
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
 
 from .base import BasePolicy, PolicyResult
 
@@ -23,7 +28,7 @@ logger = logging.getLogger(__name__)
 class EpsilonGreedyPolicy(BasePolicy):
     """ε-greedy bandit policy with configurable exploration rate"""
     
-    def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None, 
+    def __init__(self, db: Session, redis_client: Optional['redis.Redis'] = None, 
                  epsilon: float = 0.1):
         super().__init__(db, redis_client)
         self.epsilon = epsilon

@@ -10,7 +10,12 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-import redis
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
 import uuid
 
 from ..models import Experiment, PolicyAssignment, User
@@ -20,7 +25,7 @@ logger = logging.getLogger(__name__)
 class ExperimentManager:
     """Manages bandit experiments and user assignments"""
     
-    def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, db: Session, redis_client: Optional['redis.Redis'] = None):
         self.db = db
         self.redis = redis_client
         self.cache_ttl = 3600  # 1 hour

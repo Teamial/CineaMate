@@ -16,7 +16,12 @@ import math
 import logging
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-import redis
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
 from datetime import datetime
 
 from .base import BasePolicy, PolicyResult
@@ -26,7 +31,7 @@ logger = logging.getLogger(__name__)
 class ThompsonSamplingPolicy(BasePolicy):
     """Thompson Sampling bandit policy with Beta distributions"""
     
-    def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None,
+    def __init__(self, db: Session, redis_client: Optional['redis.Redis'] = None,
                  default_alpha: float = 1.0, default_beta: float = 1.0):
         super().__init__(db, redis_client)
         self.default_alpha = default_alpha

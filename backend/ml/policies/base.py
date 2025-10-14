@@ -12,7 +12,12 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-import redis
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -74,7 +79,7 @@ class Policy(ABC):
 class PolicyStateManager:
     """Manages policy state persistence and caching"""
     
-    def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, db: Session, redis_client: Optional['redis.Redis'] = None):
         self.db = db
         self.redis = redis_client
         self.cache_ttl = 300  # 5 minutes
@@ -190,7 +195,7 @@ class PolicyStateManager:
 class BasePolicy(Policy):
     """Base implementation with common functionality"""
     
-    def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, db: Session, redis_client: Optional['redis.Redis'] = None):
         self.state_manager = PolicyStateManager(db, redis_client)
         self.db = db
     
@@ -221,7 +226,8 @@ class BasePolicy(Policy):
         
         logger.debug(f"Updated {self.name} state for arm {arm_id}: count={new_count}, mean={new_mean_reward:.3f}")
 
-def get_policy(name: str, db: Session, redis_client: Optional[redis.Redis] = None) -> Policy:
+
+def get_policy(name: str, db: Session, redis_client: Optional['redis.Redis'] = None) -> Policy:
     """Factory function to get policy by name"""
     from .thompson_sampling import ThompsonSamplingPolicy
     from .epsilon_greedy import EpsilonGreedyPolicy
