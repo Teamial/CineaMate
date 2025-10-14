@@ -63,7 +63,7 @@ async def get_pipeline_status(db: Session = Depends(get_db)):
     # Get scheduled jobs info
     scheduled_jobs = []
     try:
-        from scheduler import get_scheduler
+        from ..scheduler import get_scheduler
         scheduler = get_scheduler()
         scheduled_jobs = scheduler.get_job_status()
     except Exception as e:
@@ -165,7 +165,7 @@ async def trigger_pipeline_run(
 
 def run_pipeline_task(run_id: int, update_type: str):
     """Background task to run the pipeline"""
-    from scheduler import get_scheduler
+    from ..scheduler import get_scheduler
     from ..database import SessionLocal
     import traceback
     
@@ -203,7 +203,7 @@ async def get_scheduler_status(current_user: User = Depends(get_current_user)):
     """Get scheduler service status (requires auth)"""
     
     try:
-        from scheduler import get_scheduler
+        from ..scheduler import get_scheduler
         scheduler = get_scheduler()
         jobs = scheduler.get_job_status()
         
@@ -225,7 +225,7 @@ async def start_scheduler(current_user: User = Depends(get_current_user)):
     """Start the scheduler service (requires auth)"""
     
     try:
-        from scheduler import get_scheduler
+        from ..scheduler import get_scheduler
         scheduler = get_scheduler()
         
         if scheduler.scheduler.running:
@@ -242,7 +242,7 @@ async def stop_scheduler(current_user: User = Depends(get_current_user)):
     """Stop the scheduler service (requires auth)"""
     
     try:
-        from scheduler import get_scheduler
+        from ..scheduler import get_scheduler
         scheduler = get_scheduler()
         
         if not scheduler.scheduler.running:
