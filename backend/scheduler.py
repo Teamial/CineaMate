@@ -28,10 +28,6 @@ TOOLS_PATH = os.path.join(PROJECT_ROOT, 'tools')
 if TOOLS_PATH not in sys.path:
     sys.path.append(TOOLS_PATH)
 
-logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
-logger.info(f"TOOLS_PATH: {TOOLS_PATH}")
-logger.info(f"Python path includes: {[p for p in sys.path if 'app' in p or 'tools' in p]}")
-
 # Import pipeline from tools directory
 try:
     from tools.movie_pipeline import MovieETLPipeline
