@@ -18,9 +18,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add project root to sys.path to import root-level modules in container
+# In the container, we're running from /app/backend/, so we need to go up one level to /app/
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
+    
+# Also add the tools directory specifically
+TOOLS_PATH = os.path.join(PROJECT_ROOT, 'tools')
+if TOOLS_PATH not in sys.path:
+    sys.path.append(TOOLS_PATH)
+
+logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
+logger.info(f"TOOLS_PATH: {TOOLS_PATH}")
+logger.info(f"Python path includes: {[p for p in sys.path if 'app' in p or 'tools' in p]}")
 
 # Import pipeline from tools directory
 try:
