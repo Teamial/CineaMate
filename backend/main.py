@@ -61,7 +61,7 @@ async def startup_event():
     
     # Also try to start guardrails scheduler
     try:
-        from .scheduler.guardrails_scheduler import setup_guardrails_scheduler
+        from .scheduler_pkg.guardrails_scheduler import setup_guardrails_scheduler
         from .scheduler import get_scheduler
         scheduler = get_scheduler()
         setup_guardrails_scheduler(scheduler)

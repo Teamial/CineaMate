@@ -12,9 +12,12 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 try:
-    from backend.scheduler import get_scheduler
-except ImportError:
+    # Import the scheduler module directly by name to avoid package conflicts
+    import backend.scheduler as scheduler_module
+    get_scheduler = scheduler_module.get_scheduler
+except Exception as e:
     # Fallback if the import fails
+    print(f"Warning: Could not import get_scheduler: {e}")
     get_scheduler = None
 
 from .guardrails_scheduler import setup_guardrails_scheduler, get_guardrails_scheduler, manual_guardrail_check, manual_rollback
