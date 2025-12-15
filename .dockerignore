@@ -1,0 +1,33 @@
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.DS_Store
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+# Python venvs
+.venv/
+venv/
+
+# Local env files
+.env
+.env.*
+
+# Cursor / IDE
+.cursor/
+.vscode/
+.idea/
+
+# Data / artifacts
+postgres_data/
+*.sqlite
+*.db
+

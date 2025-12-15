@@ -1,0 +1,179 @@
+name: deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "staging or production"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: "GHCR tag (e.g., sha-abcdef1, latest)"
+        required: true
+        default: "latest"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy_staging:
+    name: deploy_staging
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start LocalStack
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ steps.tag.outputs.tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml up -d localstack
+
+      - name: Terraform apply (staging)
+        uses: hashicorp/setup-terraform@v3
+      - name: Terraform apply (staging) - run
+        run: |
+          cd infra/environments/staging
+          terraform init -upgrade
+          terraform apply -auto-approve \
+            -var="localstack_endpoint=http://localhost:4566"
+
+      - name: Start DB + backend
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ steps.tag.outputs.tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml up -d db backend
+
+      - name: Gate - health
+        run: |
+          for i in {1..60}; do
+            if curl -sSf http://localhost:8000/health >/dev/null; then
+              echo "health ok"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "health check failed"
+          BACKEND_IMAGE=ghcr.io/${{ github.repository }}/cinemate-backend:${{ steps.tag.outputs.tag }} \
+            docker compose -f deployment/docker-compose.ci.yml logs --tail=200
+          exit 1
+
+      - name: Gate - smoke
+        run: |
+          curl -sSf http://localhost:8000/ | head -c 200 && echo
+
+      - name: Gate - data quality (placeholder until dq runner exists)
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml exec -T backend \
+            python /app/backend/tools/dq_gate.py \
+              --database-url "postgresql://postgres:postgres@db:5432/movies_db" \
+              --min-events 0 \
+              --window-hours 24 \
+              --max-null-pct 25 \
+              --max-dupe-pct 2
+
+      - name: Teardown
+        if: always()
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ steps.tag.outputs.tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml down -v
+
+  deploy_production:
+    name: deploy_production
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start LocalStack
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ inputs.image_tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml up -d localstack
+
+      - name: Terraform apply (production)
+        uses: hashicorp/setup-terraform@v3
+      - name: Terraform apply (production) - run
+        run: |
+          cd infra/environments/production
+          terraform init -upgrade
+          terraform apply -auto-approve \
+            -var="localstack_endpoint=http://localhost:4566"
+
+      - name: Start DB + backend
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ inputs.image_tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml up -d db backend
+
+      - name: Gate - health
+        run: |
+          for i in {1..60}; do
+            if curl -sSf http://localhost:8000/health >/dev/null; then
+              echo "health ok"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "health check failed"
+          BACKEND_IMAGE=ghcr.io/${{ github.repository }}/cinemate-backend:${{ inputs.image_tag }} \
+            docker compose -f deployment/docker-compose.ci.yml logs --tail=200
+          exit 1
+
+      - name: Gate - smoke
+        run: |
+          curl -sSf http://localhost:8000/ | head -c 200 && echo
+
+      - name: Gate - data quality (placeholder until dq runner exists)
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml exec -T backend \
+            python /app/backend/tools/dq_gate.py \
+              --database-url "postgresql://postgres:postgres@db:5432/movies_db" \
+              --min-events 1 \
+              --window-hours 24 \
+              --freshness-minutes 120 \
+              --max-null-pct 10 \
+              --max-dupe-pct 1
+
+      - name: Teardown
+        if: always()
+        env:
+          BACKEND_IMAGE: ghcr.io/${{ github.repository }}/cinemate-backend:${{ inputs.image_tag }}
+        run: |
+          docker compose -f deployment/docker-compose.ci.yml down -v
+
+
